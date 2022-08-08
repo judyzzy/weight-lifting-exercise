@@ -1,7 +1,7 @@
 ---
 title: "Weight Lifting Exercise"
 author: "Judy Zhang"
-date: '2022-07-24'
+date: '2022-08-07'
 output: html_document
 ---
 
@@ -11,24 +11,68 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Information associated with this dataset is accessible via [Internet Archive](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har). 
 
-Data are collected with 6 participants with 4 wearable sensing devices performing a set of 10 repetitions in 5 different fashions.
+Data are collected with 6 participants with 4 wearable sensing devices performing a set of 10 repetitions in 5 different fashions. This project quantifies how well each participant does barbell lifting exercise. 
 
 ```{r load_training}
-df = read.csv("pml-training.csv")
-head(df)
-```
-```{r load_training}
-summary(df)
+url_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+# url_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+df <- read.csv(url_train, na.strings = c("NA", "#DIV/0!"))
 ```
 
-## R Markdown
+```{r traing_test_split}
+library(caret)
+set.seed(1215)
+training <- createDataPartition(df$classe, p=0.7, list=F)
+train_df <- df[training, ]
+test_df <- df[-training,]
+cat("training samples: ", nrow(train_df), " testing samples: ", nrow(test_df))
+```
+```{r target_eda}
+train_df_f <- factor(train_df$classe)
+plot(train_df_f)
+```
+```{r sparse_cols}
+data_cols <- c()
+nulls <- c()
+for (col in colnames(train_df)){
+    null_length <- sum(is.na(train_df[col]))
+    if( null_length > 0){
+        data_cols <- append(col, data_cols)
+        nulls <- append(null_length/(dim(train_df)[1]), nulls)
+    }
+}
+null_cols<-data.frame(data_cols, nulls)
+hist(null_cols$nulls)
+print(summary(null_cols$nulls))
+cat("Number of sparse columns:" , length(data_cols))
+cat("\nTotal number of columns in original training dataset: " , length(colnames(train_df)))
+```
+We are going to discard sparse metrics
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r preprocess}
+valid_cols <- setdiff(colnames(train_df),null_cols$data_cols)
+train_df_trimmed <- train_df[,valid_cols]
+sensor_belt <- grep("belt", valid_cols)
+sensor_arm <- grep("_arm", valid_cols)
+sensor_forearm <-grep("forearm", valid_cols)
+sensor_dumbbell <-grep("dumbbell", valid_cols)
+cat("belt sensor: ", length(sensor_belt), 
+    ", arm sensor:", length(sensor_arm), 
+    ", forearm:", length(sensor_forearm),
+    ", dumbbelt", length(sensor_dumbbell)
+    )
+```
+```{r}
+names_sensor_belt <- names(train_df_trimmed[,sensor_belt])
+newcols_belt <- c(names_sensor_belt,"classe")
+train_df_belt <- train_df_trimmed[,newcols_belt]
+```
+```{r train_ml}
+library(caret)
+names_sensor_belt <- names(train_df_trimmed[,sensor_belt])
+newcols_belt <- c(names_sensor_belt,"classe")
+train_df_belt <- train_df_trimmed[,newcols_belt]
+model_rf_belt <- train(classe~., data=train_df_belt, method='rf')
 ```
 
 ## Including Plots
