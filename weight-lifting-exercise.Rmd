@@ -8,10 +8,17 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+<h1> Overview </h1>
 
-Information associated with this dataset is accessible via [Internet Archive](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har). 
+<p> Data is collected with 6 participants with 4 wearable sensing devices performing a set of 10 repetitions in 5 different fashions.Information associated with this dataset is accessible via [Internet Archive](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har).
+</p>
 
-Data are collected with 6 participants with 4 wearable sensing devices performing a set of 10 repetitions in 5 different fashions. This project quantifies how well each participant does barbell lifting exercise. 
+<p> This project quantifies how well each participant does barbell lifting exercise. An ensemble model is trained to classify the sensor inputs to class of move with an accuracy score of above 90%. </p>
+
+<h1> Building Machine Learning Model </h1> 
+
+<h2> Loading Data and Exploratory Analysis </h2> 
+<p> To get started, the data is loaded and parsed into training and testing set. </p>
 
 ```{r load_training}
 url_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
@@ -27,12 +34,15 @@ test_df <- df[-training,]
 cat("training samples: ", nrow(train_df), " testing samples: ", nrow(test_df))
 cat("number of columns: ", ncol(train_df))
 ```
-Data is plotted below to see if there is imbalance in the target variable. Given number of samples in each class is fairly even, there is no need for resampling of the training dataset. 
+<p> The data is plotted below to see if there is imbalance in the target variable. Given number of samples in each class is fairly even, there is no need for resampling of the training dataset. </p>
+
 ```{r target_eda}
 train_df_f <- factor(train_df$classe)
 plot(train_df_f, main='Sample Count of Each Class')
 ```
-To reduce the number of features, sparse columns are identified. Threshold is set to 0 and histogram below shows that all of the sparse columns identified have >97% rows with NULL value. 
+
+<p> To reduce the number of features, sparse columns are identified. Threshold is set to 0 and histogram below shows that all of the sparse columns identified have >97% rows with NULL value. </p>
+
 ```{r sparse_cols}
 data_cols <- c()
 nulls <- c()
@@ -53,7 +63,10 @@ print(summary(null_cols$nulls))
 cat("Number of sparse columns:" , length(data_cols))
 cat("\nTotal number of columns in original training dataset: " , length(colnames(train_df)))
 ```
-Based on dataset document, a model is trained for each sensor. Random forest classifier is used due to its built-in cross validation process and result of high accuracy. 
+<h2> Model Building </h2> 
+
+<p> Based on dataset document, a model is trained for each sensor. Random forest classifier is used due to its built-in cross validation process and result of high accuracy. </p>
+
 ```{r preprocess}
 valid_cols <- setdiff(colnames(train_df),null_cols$data_cols)
 train_df_trimmed <- train_df[,valid_cols]
@@ -95,13 +108,16 @@ dumbbell_data <- train_df_trimmed[, c(names(train_df_trimmed[,sensor_dumbbell]),
 model_dumbbell <- train(classe~., data=dumbbell_data, method=method)
 train_df_pred$dumbbell_pred <- predict(model_dumbbell, dumbbell_data)
 ```
-Results from each sensor model is merged into the ensemble model. 
+
+<p> Results from each sensor model is merged into the ensemble model. </p>
+
 ```{r stacking}
 # Train the ensemble
 model <- train(classe ~ belt_pred + arm_pred + forearm_pred + dumbbell_pred, data = train_df_pred, method = "rf")
 ```
 
-Accuracy score is measure against the test dataset. 
+<p> Accuracy score is measure against the test dataset. </p>
+
 ```{r test}
 test_df_pred <- test_df
 test_df_pred$belt_pred <- predict(model_belt, test_df)
@@ -113,6 +129,9 @@ test_df_pred$pred <- predict(model, test_df_pred)
 ```{r accuracy}
 confusionMatrix(as.factor(test_df_pred$pred), as.factor(test_df_pred$classe))
 ```
+<h1> Conclusion </h1>
+
+In this project, a machine learning model is developed to classify weight lifting sensor data to various classes of motion. Techniques discussed in the Coursera Practical Machine Learning class are demonstrated in this report.  
 
 # References
 
