@@ -15,7 +15,6 @@ Data are collected with 6 participants with 4 wearable sensing devices performin
 
 ```{r load_training}
 url_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
-# url_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 df <- read.csv(url_train, na.strings = c("NA", "#DIV/0!"))
 ```
 
@@ -26,11 +25,14 @@ training <- createDataPartition(df$classe, p=0.7, list=F)
 train_df <- df[training, ]
 test_df <- df[-training,]
 cat("training samples: ", nrow(train_df), " testing samples: ", nrow(test_df))
+cat("number of columns: ", ncol(train_df))
 ```
+Data is plotted below to see if there is imbalance in the target variable. Given number of samples in each class is fairly even, there is no need for resampling of the training dataset. 
 ```{r target_eda}
 train_df_f <- factor(train_df$classe)
-plot(train_df_f)
+plot(train_df_f, main='Sample Count of Each Class')
 ```
+To reduce the number of features, sparse columns are identified. Threshold is set to 0 and histogram below shows that all of the sparse columns identified have >97% rows with NULL value. 
 ```{r sparse_cols}
 data_cols <- c()
 nulls <- c()
@@ -42,13 +44,16 @@ for (col in colnames(train_df)){
     }
 }
 null_cols<-data.frame(data_cols, nulls)
-hist(null_cols$nulls)
+hist(null_cols$nulls*100, 
+     main="% of NULLs in Identified Sparse Columns",
+     xlab="Percent of NULL records in total rows",
+     ylab="Sparse Column Count"
+     )
 print(summary(null_cols$nulls))
 cat("Number of sparse columns:" , length(data_cols))
 cat("\nTotal number of columns in original training dataset: " , length(colnames(train_df)))
 ```
-We are going to discard sparse metrics
-
+Based on dataset document, a model is trained for each sensor. Random forest classifier is used due to its built-in cross validation process and result of high accuracy. 
 ```{r preprocess}
 valid_cols <- setdiff(colnames(train_df),null_cols$data_cols)
 train_df_trimmed <- train_df[,valid_cols]
@@ -62,25 +67,54 @@ cat("belt sensor: ", length(sensor_belt),
     ", dumbbelt", length(sensor_dumbbell)
     )
 ```
-```{r}
-names_sensor_belt <- names(train_df_trimmed[,sensor_belt])
-newcols_belt <- c(names_sensor_belt,"classe")
-train_df_belt <- train_df_trimmed[,newcols_belt]
-```
-```{r train_ml}
+```{r batch_train}
 library(caret)
-names_sensor_belt <- names(train_df_trimmed[,sensor_belt])
-newcols_belt <- c(names_sensor_belt,"classe")
-train_df_belt <- train_df_trimmed[,newcols_belt]
-model_rf_belt <- train(classe~., data=train_df_belt, method='rf')
+train_df_pred <- train_df
+method <- 'rf'
+```
+```{r train_belt}
+belt_data <- train_df_trimmed[, c(names(train_df_trimmed[,sensor_belt]),"classe")]
+model_belt <- train(classe~., data=belt_data, method=method)
+train_df_pred$belt_pred <- predict(model_belt, belt_data)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r train_arm}
+arm_data <- train_df_trimmed[, c(names(train_df_trimmed[,sensor_arm]),"classe")]
+model_arm <- train(classe~., data=arm_data, method=method)
+train_df_pred$arm_pred <- predict(model_arm, arm_data)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r train_forearm}
+forearm_data <- train_df_trimmed[, c(names(train_df_trimmed[,sensor_forearm]),"classe")]
+model_forearm <- train(classe~., data=forearm_data, method=method)
+train_df_pred$forearm_pred <- predict(model_forearm, forearm_data)
+```
+
+```{r train_dumbbell}
+dumbbell_data <- train_df_trimmed[, c(names(train_df_trimmed[,sensor_dumbbell]),"classe")]
+model_dumbbell <- train(classe~., data=dumbbell_data, method=method)
+train_df_pred$dumbbell_pred <- predict(model_dumbbell, dumbbell_data)
+```
+Results from each sensor model is merged into the ensemble model. 
+```{r stacking}
+# Train the ensemble
+model <- train(classe ~ belt_pred + arm_pred + forearm_pred + dumbbell_pred, data = train_df_pred, method = "rf")
+```
+
+Accuracy score is measure against the test dataset. 
+```{r test}
+test_df_pred <- test_df
+test_df_pred$belt_pred <- predict(model_belt, test_df)
+test_df_pred$arm_pred <- predict(model_arm, test_df)
+test_df_pred$forearm_pred <- predict(model_forearm, test_df)
+test_df_pred$dumbbell_pred <- predict(model_dumbbell, test_df)
+test_df_pred$pred <- predict(model, test_df_pred)
+```
+```{r accuracy}
+confusionMatrix(as.factor(test_df_pred$pred), as.factor(test_df_pred$classe))
+```
+
+# References
+
+<div id="refs">Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.</div>
+
